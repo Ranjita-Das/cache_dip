@@ -310,6 +310,9 @@ cache_create(char *name,		/* name of the cache */
   cp->assoc = assoc;
   cp->policy = policy;
   cp->hit_latency = hit_latency;
+  cp->PSEL = 511;		/*-Initializing of PSEL*/
+  cp->throttle1=0;
+  cp->throttle2=0;
 
   /* miss/replacement functions */
   cp->blk_access_fn = blk_access_fn;
@@ -409,6 +412,7 @@ cache_char2policy(char c)		/* replacement policy as a char */
   case 'l': return LRU;
   case 'r': return Random;
   case 'f': return FIFO;
+  case 'd': return DIP; /* inserting a case for the dynamic insertion policy */
   default: fatal("bogus replacement policy, `%c'", c);
   }
 }
@@ -575,6 +579,62 @@ cache_access(struct cache_t *cp,	/* cache to access */
     repl = cp->sets[set].way_tail;
     update_way_list(&cp->sets[set], repl, Head);
     break;
+    
+  case DIP:
+	  /*Implementation of LRU policy */	
+	  if (set  == 0 || set%1024==0 || set % 33 == 0)	
+	  {      
+		  repl = cp->sets[set].way_tail;
+		  update_way_list(&cp->sets[set], repl, Head);
+		  if (cp->PSEL < 1023)
+			  cp->PSEL++;
+		  break;
+	  }
+	  /*Implementation of BIP policy */
+	  if (set % 31 == 0)					
+	  {      
+		  if (cp->throttle1==31)             
+		  {       
+			  repl = cp->sets[set].way_tail;
+			  update_way_list(&cp->sets[set], repl, Head);
+			  cp->throttle1=0;
+		  }
+		  else
+		  {      
+			  repl = cp->sets[set].way_tail;	
+			  update_way_list(&cp->sets[set], repl, Tail);
+			  cp->throttle1++;
+		  }
+		  if (cp->PSEL > 0)
+			  cp->PSEL--;
+		  break;
+	  }
+	  else
+	  {       
+		  if (cp->PSEL<511)
+		  {
+			  repl = cp->sets[set].way_tail;
+			  update_way_list(&cp->sets[set], repl, Head);
+			  break;
+		  }
+		  else
+		  {
+			  if (cp->throttle2==31)
+			  {
+				  repl = cp->sets[set].way_tail;
+				  update_way_list(&cp->sets[set], repl, Head);
+				  cp->throttle2=0;
+			  }
+			  else
+			  {
+				  repl = cp->sets[set].way_tail;
+				  update_way_list(&cp->sets[set], repl, Tail);
+				  cp->throttle2++;
+			  }
+		  	  break;
+		  }
+	  }
+    
   case Random:
     {
       int bindex = myrand() & (cp->assoc - 1);
@@ -670,6 +730,12 @@ cache_access(struct cache_t *cp,	/* cache to access */
 
   /* if LRU replacement and this is not the first element of list, reorder */
   if (blk->way_prev && cp->policy == LRU)
+    {
+      /* move this block to head of the way (MRU) list */
+      update_way_list(&cp->sets[set], blk, Head);
+    }
+    
+  if (blk->way_prev && cp->policy == DIP)
     {
       /* move this block to head of the way (MRU) list */
       update_way_list(&cp->sets[set], blk, Head);
