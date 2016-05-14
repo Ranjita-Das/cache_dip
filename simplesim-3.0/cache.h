@@ -96,13 +96,14 @@
 
 /* highly associative caches are implemented using a hash table lookup to
    speed block access, this macro decides if a cache is "highly associative" */
-#define CACHE_HIGHLY_ASSOC(cp)	((cp)->assoc > 4)
+#define CACHE_HIGHLY_ASSOC(cp)	((cp)->assoc > 16) /*keeping the associativity constant at 16-way*/
 
 /* cache replacement policy */
 enum cache_policy {
   LRU,		/* replace least recently used block (perfect LRU) */
   Random,	/* replace a random block */
-  FIFO		/* replace the oldest block in the set */
+  FIFO,     /* replace the oldest block in the set */
+  DIP       /* dynamic insertion policy */
 };
 
 /* block status values */
@@ -155,7 +156,9 @@ struct cache_t
   int usize;			/* user allocated data size */
   int assoc;			/* cache associativity */
   enum cache_policy policy;	/* cache replacement policy */
-  unsigned int hit_latency;	/* cache hit latency */
+  unsigned int hit_latency; /* cache hit latency */
+  int PSEL;             /* initializing the saturating counter which keeps track of which of the two policies(LRU and BIP) incurs fewer misses */
+  int throttle1,throttle2;
 
   /* miss/replacement handler, read/write BSIZE bytes starting at BADDR
      from/into cache block BLK, returns the latency of the operation
